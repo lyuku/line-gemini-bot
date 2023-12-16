@@ -3,5 +3,7 @@ type = "webpack"
 
 account_id = ""
 workers_dev = true
-route = ""
-zone_id = ""
+# Specify the entry-point script here
+main = "index.js"
+
+compatibility_date = "2023-12-16"

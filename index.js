@@ -1,82 +1,85 @@
-import { Router } from 'itty-router'
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-// Create a new router
-const router = Router()
 
-/*
-Our index route, a simple hello world.
-*/
-router.get("/", () => {
-  return new Response("Hello, world! This is the root page of your Worker template.")
-})
+addEventListener('fetch', (event) => {
+  event.respondWith(handleRequest(event.request));
+  // event.respondWith(handleLocal(event.request));
+});
 
-/*
-This route demonstrates path parameters, allowing you to extract fragments from the request
-URL.
 
-Try visit /example/hello and see the response.
-*/
-router.get("/example/:text", ({ params }) => {
-  // Decode text like "Hello%20world" into "Hello world"
-  let input = decodeURIComponent(params.text)
+// async function handleLocal(request) {
+//   const body = await request.text();
+//   const result = await requestGemini("");
+//   return new Response(result, { status: 200 });
+// }
 
-  // Construct a buffer from our input
-  let buffer = Buffer.from(input, "utf8")
+async function handleRequest(request) {
+  try {
+    // Validate the request (you may add more validation as needed)
+    // if (request.method !== 'POST') {
+    //   return new Response('Method Not Allowed', { status: 405 });
+    // }
 
-  // Serialise the buffer into a base64 string
-  let base64 = buffer.toString("base64")
+    const body = await request.text();
+    const json = JSON.parse(body);
+    // console.log(body);
+    // console.log(JSON.stringify(request.headers));
+    // Verify the signature (replace 'YOUR_CHANNEL_SECRET' with your actual channel secret)
+    // const isValidSignature = validateSignature(request.headers, body, 'YOUR_CHANNEL_SECRET');
+    // if (!isValidSignature) {
+    //   return new Response('Unauthorized', { status: 401 });
+    // }
 
-  // Return the HTML with the string to the client
-  return new Response(`<p>Base64 encoding: <code>${base64}</code></p>`, {
-    headers: {
-      "Content-Type": "text/html"
-    }
-  })
-})
+    // Process incoming events
+    const message = json.events[0].message.text;
+    // const replyText = `You said: ${json.events[0].message.text}`;
 
-/*
-This shows a different HTTP method, a POST.
+    const geminiReply = await requestGemini(message)
+    console.log(geminiReply);
+    await replyToLine(geminiReply, json.events[0].replyToken);
 
-Try send a POST request using curl or another tool.
-
-Try the below curl command to send JSON:
-
-$ curl -X POST <worker> -H "Content-Type: application/json" -d '{"abc": "def"}'
-*/
-router.post("/post", async request => {
-  // Create a base object with some fields.
-  let fields = {
-    "asn": request.cf.asn,
-    "colo": request.cf.colo
+    return new Response('OK', { status: 200 });
+  } catch (error) {
+    console.error(error);
+    return new Response('Internal Server Error', { status: 500 });
   }
+}
 
-  // If the POST data is JSON then attach it to our response.
-  if (request.headers.get("Content-Type") === "application/json") {
-    fields["json"] = await request.json()
-  }
+async function requestGemini(customPrompt) {
+  
+  // Create a client with your API key
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-  // Serialise the JSON to a string.
-  const returnData = JSON.stringify(fields, null, 2);
+  // Define your prompt
+  const systemPrompt = "you must follow these rules: 1. response must be within 100 words; 2. answer with the same language as the question; 3. be smart; 4. be profession; 5. be pithy. please reply this text:";
 
-  return new Response(returnData, {
-    headers: {
-      "Content-Type": "application/json"
-    }
-  })
-})
+  // Get the generative model
+  const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
-/*
-This is the last route we define, it will match anything that hasn't hit a route we've defined
-above, therefore it's useful as a 404 (and avoids us hitting worker exceptions, so make sure to include it!).
+  // Generate text
+  const result = await model.generateContent(systemPrompt + customPrompt);
+  return result.response.candidates[0].content.parts[0].text;
+}
 
-Visit any page that doesn't exist (e.g. /foobar) to see it in action.
-*/
-router.all("*", () => new Response("404, not found!", { status: 404 }))
+async function replyToLine(replyText, replyToken) {
+  const url = 'https://api.line.me/v2/bot/message/reply';
 
-/*
-This snippet ties our worker to the router we deifned above, all incoming requests
-are passed to the router where your routes are called and the response is sent.
-*/
-addEventListener('fetch', (e) => {
-  e.respondWith(router.handle(e.request))
-})
+  const headers = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${CHANNEL_ACCESS_TOKEN}`,
+  };
+
+  const body = JSON.stringify({
+    replyToken: replyToken,
+    messages: [{ type: 'text', text: replyText }],
+  });
+
+  const result = await fetch(url, { method: 'POST', headers, body });
+}
+
+// function validateSignature(headers, body, channelSecret) {
+//   const signature = headers.get('X-Line-Signature') || '';
+//   const crypto = require('crypto');
+//   const hash = crypto.createHmac('sha256', channelSecret).update(body).digest('base64');
+//   return signature === hash;
+// }

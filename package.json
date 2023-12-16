@@ -1,5 +1,5 @@
 {
-    "name": "{{ project-name }}",
+    "name": "geminibot",
     "private": true,
     "version": "1.0.0",
     "description": "package for creating workers templates",
@@ -14,6 +14,7 @@
         "prettier": "^1.17.0"
     },
     "dependencies": {
+        "@google/generative-ai": "^0.1.2",
         "itty-router": "^2.1.9",
         "serverless-cloudflare-workers": "^1.2.0"
     }
